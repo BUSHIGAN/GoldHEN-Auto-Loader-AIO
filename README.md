@@ -8,6 +8,7 @@
 * [**sleirsgoevy**](https://github.com/sleirsgoevy) — [bdj-doom](https://github.com/sleirsgoevy/bdj-doom): Java console.
 * [**John Törnblom**](https://github.com/john-tornblom) — [ps4-payload-sdk](https://github.com/ps4-payload-dev/sdk): AIO fix build environment.
 * [**SiSTRo**](https://github.com/SiSTR0) — [GoldHEN](https://github.com/GoldHEN): [GoldHEN v2.4b18.7](https://ko-fi.com/s/5d29f9e29c).
+* [**Lucas Leal**](https://github.com/lucaslealdev) - [AutoLoad](https://github.com/lucaslealdev/henloader_lp/releases/tag/1.1.0): Autoload Goldhen
 
 ### Note
 
