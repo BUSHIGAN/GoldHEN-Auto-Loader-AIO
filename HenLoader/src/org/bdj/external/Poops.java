@@ -126,6 +126,10 @@ public class Poops {
     private static long kBase;
 
     private static API api;
+	
+	public static void setConsole(PrintStream c) {
+    console = c;
+	}
 
     // sys methods
     private static int dup(int fd) {
@@ -931,7 +935,7 @@ public class Poops {
         }
 
         // perform setup
-        console.println("Pre-configuration");
+        console.println("Pre-configuration...");
         if (!performSetup())
         {
             console.println("pre-config failure");
@@ -952,14 +956,14 @@ public class Poops {
             return -6;
         }
 
-        console.println("Escaping sandbox");
+        console.println("Escaping sandbox...");
         if (!escapeSandbox()) {
             cons.println("Escape sandbox failed");
             cleanup();
             return -7;
         }
 
-        console.println("Patching system");
+        console.println("Patching system...");
         if (!applyKernelPatchesPS4()) {
             cons.println("Applying patches failed");
             cleanup();

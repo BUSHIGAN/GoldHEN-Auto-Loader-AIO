@@ -8,11 +8,7 @@ import java.awt.BorderLayout;
 import org.havi.ui.HScene;
 import org.havi.ui.HSceneFactory;
 
-import org.dvb.event.UserEvent;
-import org.dvb.event.EventManager;
-import org.dvb.event.UserEventListener;
-import org.dvb.event.UserEventRepository;
-
+import org.dvb.event.*;
 import org.bluray.ui.event.HRcEvent;
 
 import org.bdj.sandbox.DisableSecurityManagerAction;
@@ -20,36 +16,27 @@ import org.bdj.external.*;
 
 public class InitXlet implements Xlet, UserEventListener
 {
-    public static final int BUTTON_X = 10;
-    public static final int BUTTON_O = 19;
-    public static final int BUTTON_U = 38;
-    public static final int BUTTON_D = 40;
+    public static final int BUTTON_X = HRcEvent.VK_ENTER;
+    public static final int BUTTON_O = HRcEvent.VK_COLORED_KEY_1;
+    public static final int BUTTON_U = HRcEvent.VK_UP;
+    public static final int BUTTON_D = HRcEvent.VK_DOWN;
+    public static final int BUTTON_S = HRcEvent.VK_COLORED_KEY_2;
 
     public static InitXlet instance;
 
-    public static class EventQueue
-    {
-        private LinkedList l;
-        int cnt = 0;
+    public static class EventQueue {
+        private LinkedList list = new LinkedList();
+        private int count = 0;
 
-        EventQueue()
-        {
-            l = new LinkedList();
+        public synchronized void put(Object o) {
+            list.addLast(o);
+            count++;
         }
 
-        public synchronized void put(Object obj)
-        {
-            l.addLast(obj);
-            cnt++;
-        }
-
-        public synchronized Object get()
-        {
-            if(cnt == 0)
-                return null;
-            Object o = l.getFirst();
-            l.removeFirst();
-            cnt--;
+        public synchronized Object get() {
+            if (count == 0) return null;
+            Object o = list.removeFirst();
+            count--;
             return o;
         }
     }
@@ -57,54 +44,61 @@ public class InitXlet implements Xlet, UserEventListener
     private EventQueue eq;
     private HScene scene;
     private Screen gui;
-    public XletContext context;
+    private XletContext context;
+
+    public static final ArrayList messages = new ArrayList();
     private static PrintStream console;
-    private static final ArrayList messages = new ArrayList();
 
     private Timer autoTimer;
-    private int countdown = 10;
+    private int countdown = 1;
 
     private boolean fwSupportsLapse = false;
     private boolean fwSupportsPoops = false;
 
-    public void initXlet(XletContext context)
+    private boolean autoLoadEnabled = false;
+    private int autoMode = -1;
+
+    public void initXlet(XletContext ctx) throws XletStateChangeException
     {
-        try { DisableSecurityManagerAction.execute(); } catch(Exception e) {}
+        try { DisableSecurityManagerAction.execute(); } catch(Exception e){}
 
         InitXlet.instance = this;
-        this.context = context;
-        this.eq = new EventQueue();
+        this.context = ctx;
+
+        eq = new EventQueue();
         scene = HSceneFactory.getInstance().getDefaultHScene();
 
-        try
-        {
+        try {
             gui = new Screen(messages);
             gui.setSize(1920, 1080);
             scene.add(gui, BorderLayout.CENTER);
 
-            UserEventRepository repo = new UserEventRepository("input");
+            autoLoadEnabled = AutoLoadConfig.loadAutoLoadSetting();
+            gui.setAutoLoadEnabled(autoLoadEnabled);
+
+            UserEventRepository repo = new UserEventRepository("events");
             repo.addKey(BUTTON_X);
             repo.addKey(BUTTON_O);
             repo.addKey(BUTTON_U);
             repo.addKey(BUTTON_D);
+            repo.addKey(BUTTON_S);
             EventManager.getInstance().addUserEventListener(this, repo);
 
-            new Thread()
-            {
-                public void run()
-                {
-                    try
-                    {
+            final XletContext finalCtx = ctx;
+
+            new Thread(new Runnable() {
+                public void run() {
+                    try {
                         scene.repaint();
                         console = new PrintStream(new MessagesOutputStream(messages, scene));
 
                         console.println("");
                         console.println("- GoldHEN 2.4b18.7 by SiSTR0");
-                        console.println("- POOPS code by Theflow0");
-                        console.println("- LAPSE code by Gezine");
-                        console.println("- BD-JB build environment by Kimariin");
-                        console.println("- JAVA console by Sleirsgoevy");
-                        console.println("- BD-JB designed and modded by Bushigan");
+                        console.println("- LAPSE by Gezine");
+                        console.println("- POOPS by TheFlow0");
+                        console.println("- BD-JB SDK by John Tornblom");
+                        console.println("- Console Wrapper by Sleirsgoevy");
+                        console.println("- Deluxe AIO Menu by Bushigan");
                         console.println("");
 
                         System.gc();
@@ -112,87 +106,123 @@ public class InitXlet implements Xlet, UserEventListener
                         Kernel.initializeKernelOffsets();
                         String fw = Helper.getCurrentFirmwareVersion();
                         gui.setFirmware(fw);
-                        console.println("Firmware : " + fw);
+                        console.println("Firmware: " + fw);
 
                         if (!KernelOffset.hasPS4Offsets()) {
-                            console.println("Unsupported Firmware !");
+                            console.println("Unsupported firmware");
                             return;
                         }
 
                         try {
                             float f = Float.parseFloat(fw);
                             if (f >= 9.00f && f <= 12.02f) fwSupportsLapse = true;
-                            if (f >= 12.50f && f <= 12.52f) fwSupportsPoops = true;
+                            if (f >= 9.00f && f <= 12.52f) fwSupportsPoops = true;
                         } catch(Exception e){}
 
-                        fwSupportsPoops = !fwSupportsLapse || fwSupportsPoops;
-
                         if (fwSupportsLapse) {
+                            autoMode = 0;
+                            while (gui.getSelected() != 0) gui.moveSelection(-1);
                             console.println("AUTO-SELECT: LAPSE");
-                            gui.moveSelection(-9999);
-                        } else {
+                        } else if (fwSupportsPoops) {
+                            autoMode = 1;
+                            while (gui.getSelected() != 1) gui.moveSelection(1);
                             console.println("AUTO-SELECT: POOPS");
-                            gui.moveSelection(9999);
+                        } else {
+                            autoMode = -1;
+                            console.println("No exploit supported");
                         }
 
-                        console.println("Auto-loader armed (" +
-                                       (fwSupportsLapse ? "LAPSE" : "POOPS") + ")");
+                        console.println("Auto-Loader: " + (autoLoadEnabled ? "ENABLED" : "DISABLED"));
 
-                        startAutoCountdown();
+                        if (autoLoadEnabled && autoMode != -1)
+                            startAutoCountdown();
 
-                        while(true)
-                        {
+                        while (true) {
+
                             int code = pollInput();
 
-                            if(code == BUTTON_U) {
+                            if (code == BUTTON_U) {
                                 gui.moveSelection(-1);
                                 resetAutoCountdown();
                             }
-                            else if(code == BUTTON_D) {
+                            else if (code == BUTTON_D) {
                                 gui.moveSelection(1);
                                 resetAutoCountdown();
                             }
-                            else if(code == BUTTON_X) {
+                            else if (code == BUTTON_X) {
+
                                 stopAutoCountdown();
                                 int sel = gui.getSelected();
-                                if (sel == 0) runSelection(true);
-                                else if (sel == 1) runSelection(false);
-                                break;
+
+                                if (sel == 0) runSelection(0);
+                                else if (sel == 1) runSelection(1);
+                                else if (sel == 2) FileHelper.copyPayload(console);
+                                else if (sel == 3) TestBinRunner.runTestBin(console);
+                                else if (sel == 4) TestBinRunner.runDisableUpdates(console);
+                                else if (sel == 5) HomebrewLauncher.openMenu(console);
+                                else if (sel == 6) UsbPayloadLauncher.openUSB(console);
+                                else if (sel == 7) toggleAutoLoader();
+
+                                scene.repaint();
                             }
-                            else if(code == BUTTON_O) {
+                            else if (code == BUTTON_S) {
+                                synchronized(messages) {
+                                    messages.clear();
+                                }
+                                console.println("[LOG CLEARED]");
+                                scene.repaint();
+                            }
+                            else if (code == BUTTON_O) {
                                 stopAutoCountdown();
-                                console.println("Exiting Auto-Loader…");
-                                console.println("Goodbye from Loader.");
-                                try {
-                                    InitXlet.instance.context.notifyDestroyed();
-                                } catch(Exception e){}
+                                console.println("Exiting...");
+                                try { finalCtx.notifyDestroyed(); } catch(Exception e){}
                                 return;
                             }
 
-                            try { Thread.sleep(10); }
-                            catch(Exception e){}
+                            Thread.sleep(12);
                         }
 
-                    }
-                    catch(Throwable e)
-                    {
-                        scene.repaint();
+                    } catch(Throwable e) {
+                        console.println("[EXCEPTION] " + e.toString());
                     }
                 }
-            }.start();
+            }).start();
 
-        }
-        catch(Throwable e)
-        {
-            printStackTrace(e);
-        }
-
+        } catch(Throwable e) {}
         scene.validate();
     }
 
-    private void startAutoCountdown()
-    {
-        countdown = 10;
+    public void startXlet() throws XletStateChangeException {
+        gui.setVisible(true);
+        scene.setVisible(true);
+        gui.requestFocus();
+    }
+
+    public void pauseXlet() {
+        gui.setVisible(false);
+    }
+
+    public void destroyXlet(boolean unconditional) throws XletStateChangeException {
+        try {
+            if (scene != null && gui != null)
+                scene.remove(gui);
+        } catch(Exception e){}
+        scene = null;
+        gui = null;
+        System.gc();
+    }
+
+    private void toggleAutoLoader() {
+        autoLoadEnabled = !autoLoadEnabled;
+        AutoLoadConfig.saveAutoLoadSetting(autoLoadEnabled);
+        gui.setAutoLoadEnabled(autoLoadEnabled);
+        console.println("Auto-Loader: " + (autoLoadEnabled ? "ON" : "OFF"));
+        if (autoLoadEnabled && autoMode != -1) startAutoCountdown();
+        else stopAutoCountdown();
+    }
+
+    private void startAutoCountdown() {
+        countdown = 2;
         gui.setCountdown(countdown);
 
         autoTimer = new Timer();
@@ -200,95 +230,48 @@ public class InitXlet implements Xlet, UserEventListener
             public void run() {
                 countdown--;
                 gui.setCountdown(countdown);
-
                 if (countdown <= 0) {
                     stopAutoCountdown();
-                    if (fwSupportsLapse) runSelection(true);
-                    else runSelection(false);
+                    runSelection(autoMode);
                 }
             }
         }, 1000, 1000);
     }
 
     private void resetAutoCountdown() {
-        countdown = 10;
+        if (!autoLoadEnabled || autoMode == -1) return;
+        countdown = 1;
         gui.setCountdown(countdown);
     }
 
     private void stopAutoCountdown() {
-        if(autoTimer != null)
+        if (autoTimer != null)
             autoTimer.cancel();
         autoTimer = null;
     }
 
-    private void runSelection(boolean isLapse)
-    {
-        int result;
+    private void runSelection(int mode) {
+        int r = -1;
 
-        if (isLapse) {
-            console.println("Running LAPSE...");
-            result = org.bdj.external.Lapse.main(console);
-        } else {
-            console.println("Running POOPS...");
-            result = org.bdj.external.Poops.main(console);
-        }
+        if (mode == 0) r = Lapse.main(console);
+        else if (mode == 1) r = Poops.main(console);
 
-        if(result == 0)
-            console.println("Success !");
-        else
-            console.println("Fatal fail(" + result + "), please REBOOT PS4");
+        if (r == 0) console.println("Success !");
+        else console.println("Fail (" + r + "), reboot PS4 !");
     }
 
-    public void startXlet()
-    {
-        gui.setVisible(true);
-        scene.setVisible(true);
-        gui.requestFocus();
-    }
-
-    public void pauseXlet()
-    {
-        gui.setVisible(false);
-    }
-
-    public void destroyXlet(boolean unconditional)
-    {
-        try {
-            if (scene != null && gui != null)
-                scene.remove(gui);
-        } catch(Exception e){}
-
-        scene = null;
-        gui = null;
-
-        System.gc();
-    }
-
-    private void printStackTrace(Throwable e)
-    {
-        StringWriter sw = new StringWriter();
-        PrintWriter pw = new PrintWriter(sw);
-        e.printStackTrace(pw);
-        if(console != null)
-            console.print(sw.toString());
-    }
-
-    public void userEventReceived(UserEvent evt)
-    {
-        if(evt.getType() == HRcEvent.KEY_PRESSED)
+    public void userEventReceived(UserEvent evt) {
+        if (evt.getType() == HRcEvent.KEY_PRESSED)
             eq.put(new Integer(evt.getCode()));
     }
 
-    public static void repaint()
-    {
-        instance.scene.repaint();
+    public static int pollInput() {
+        Object o = instance.eq.get();
+        if (o == null) return 0;
+        return ((Integer)o).intValue();
     }
 
-    public static int pollInput()
-    {
-        Object ans = instance.eq.get();
-        if(ans == null)
-            return 0;
-        return ((Integer)ans).intValue();
+    public static void repaint() {
+        instance.scene.repaint();
     }
 }
